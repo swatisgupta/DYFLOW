@@ -28,12 +28,13 @@ enum SENDER_TYPE {
 #define RES_WAIT "WAIT"
 #define RES_SKIP "SKIP_STEP"
 #define RES_COMP "COMPRESS_VAR"
+#define RES_UNCOMP "UNCOMPRESS_VAR"
 #define RES_DUMP "DUMP_STEP"
 
-class Messenger {
+class StreamMessenger {
 
     public:
-    Messenger(SOCKET_TYPE, SENDER_TYPE, const std::string);
+    StreamMessenger(SOCKET_TYPE, SENDER_TYPE, const std::string);
     bool send_msg(std::string);
     std::string receive_msg();
     void set_stream(std::string);

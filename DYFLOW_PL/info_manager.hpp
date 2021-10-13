@@ -3,7 +3,7 @@
 
 #include <unordered_map>
 #include <vector>
-#include "messenger.hpp"
+#include "stream_messenger.hpp"
 #include "stream_prop.hpp"
 
 
@@ -21,7 +21,7 @@ enum policy_types {
 };
 
 
-class DataManager {
+class InfoManager {
 
    private:
    std::string stream;
@@ -46,7 +46,7 @@ class DataManager {
    void set_policy(std::string stream_v, int policy, std::vector<std::string> &);
    
    public:
-   DataManager(std::string); 
+   InfoManager(std::string); 
    bool register_reader(std::string); 
    bool register_writer(std::string); 
 

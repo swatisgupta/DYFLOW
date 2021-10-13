@@ -1,5 +1,5 @@
-#include "messenger.hpp"
-#include "data_manager.hpp"
+#include "stream_messenger.hpp"
+#include "info_manager.hpp"
 #include <nlohmann/json.hpp>
 #include <unistd.h>
 #include <iostream>
@@ -15,7 +15,7 @@ using json = nlohmann::json;
 bool done = false;
 std::string my_ip;
 std::string stream_file = ""; 
-DataManager* datam; // = new DataManager(""); 
+InfoManager* datam; // = new InfoManager(""); 
 
 
 
@@ -31,7 +31,7 @@ void apply_arbitrator_policy(json j_msg, std::string stream) {
                 } 
                 if ( j_msg.contains("reg_stream") )  {   
                     if ( datam == nullptr ) {
-                       datam = new DataManager(j_msg.value("reg_stream", ""));
+                       datam = new InfoManager(j_msg.value("reg_stream", ""));
                        if (!stream_file.compare("")) {
                            remove(stream_file.c_str()); 
                        }
@@ -168,6 +168,7 @@ std::string handle_conn_requests(json j_msg, std::string stream, int tag_pid) {
                 } else if ( j_msg.contains("get_var") ) {
 
                 }    
+                  
 }
 
 
@@ -184,10 +185,10 @@ int main(int argc, char** argv) {
     my_ip = "tcp://" + nm + ":49152";
 
    /* Sever that listens to requests from stream connection */
-    Messenger msgr_conn(SERVER, INTERM, my_ip);  
+    StreamMessenger msgr_conn(SERVER, INTERM, my_ip);  
 
    /* Client that receives instructions from arbitrator */ 
-    //Messenger msgr_arb = new Messenger(CLIENT, INTERM, arb_ip);
+    //StreamMessenger msgr_arb = new StreamMessenger(CLIENT, INTERM, arb_ip);
 
     DEBUG("This is Data Manager")
 

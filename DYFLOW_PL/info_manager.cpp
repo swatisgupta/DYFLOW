@@ -1,11 +1,11 @@
-#include "data_manager.hpp"
+#include "info_manager.hpp"
 
 
 
-DataManager::DataManager(std::string str):stream(str), writerId(-1), writerStr(""), connections() {
+InfoManager::InfoManager(std::string str):stream(str), writerId(-1), writerStr(""), connections() {
 } 
 
-bool DataManager::register_reader(std::string str) {
+bool InfoManager::register_reader(std::string str) {
     auto ele = connections.find(str);
     if ( ele == connections.end() ) {
         global_prop.nreaders++;
@@ -25,7 +25,7 @@ bool DataManager::register_reader(std::string str) {
     return true;
 }
 
-bool DataManager::is_registered(std::string str, int id) {
+bool InfoManager::is_registered(std::string str, int id) {
      auto ele = connections.find(str);
      if ( ele != connections.end() ) {
          return ele->second->is_registered(id); 
@@ -33,7 +33,7 @@ bool DataManager::is_registered(std::string str, int id) {
      return false;
 }
 
-bool DataManager::register_writer(std::string str) {
+bool InfoManager::register_writer(std::string str) {
     auto ele = connections.find(str);
     if ( ele == connections.end() ) {
         StreamProperties* writer = new StreamProperties(&global_prop, 0, true);
@@ -42,7 +42,7 @@ bool DataManager::register_writer(std::string str) {
     return true;
 }
 
-bool DataManager::register_connection(std::string str, int id) {
+bool InfoManager::register_connection(std::string str, int id) {
 
     bool ret = true;
  
@@ -53,11 +53,11 @@ bool DataManager::register_connection(std::string str, int id) {
     return ret; 
 }
 
-std::string DataManager::get_stream() {
+std::string InfoManager::get_stream() {
     return stream;
 }
  
-bool DataManager::deregister_connection(std::string str, int id) {
+bool InfoManager::deregister_connection(std::string str, int id) {
 
     bool ret = false, found = false;
     int pos = -1;
@@ -69,7 +69,7 @@ bool DataManager::deregister_connection(std::string str, int id) {
     return true;
 }
 
-void DataManager::reset_prop() {
+void InfoManager::reset_prop() {
      global_prop.compress_var.clear();
      global_prop.disk_write = false;
      global_prop.if_close = true;
@@ -80,7 +80,7 @@ void DataManager::reset_prop() {
 }
 
 
-void DataManager::set_policy(std::string stream_v, int policy, std::vector<std::string>& params ) {
+void InfoManager::set_policy(std::string stream_v, int policy, std::vector<std::string>& params ) {
      
      int n;
     

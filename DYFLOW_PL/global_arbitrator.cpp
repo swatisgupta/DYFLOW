@@ -1,9 +1,7 @@
-#include "messenger.hpp"
+#include "stream_messenger.hpp"
 #include <unistd.h>
-#include<iostream>
+#include <iostream>
 #include <nlohmann/json.hpp>
-#include<unistd.h>
-
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -23,7 +21,7 @@ int main(int argc, char** argv) {
     std::string ip("tcp://" + nm + ":49152"); 
    
     std::cout << ip;
-    Messenger msngr(CLIENT, ARBITRATOR, ip);
+    StreamMessenger msngr(CLIENT, ARBITRATOR, ip);
 
     std::string stream(argv[1]);
     std::string reader(argv[2]);

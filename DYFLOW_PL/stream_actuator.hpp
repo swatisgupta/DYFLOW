@@ -4,12 +4,12 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include "messenger.hpp"
+#include "stream_messenger.hpp"
 #include <sys/types.h>
 #include <unistd.h>
 #include "mpi.h"
 
-class Streamer {
+class StreamActuator {
    public:
    bool open();
 
@@ -19,19 +19,24 @@ class Streamer {
    bool write_var(std::string);
    bool compress_var(std::string);
    
-   bool next_step();
+   bool begin();
 
-   bool exit_step();
+   int put(std::string var, std::string & params);
+
+   bool end();
+
+   bool get(std::string );
 
    bool close();
 
    bool get_ip();
 
-   Streamer(int, MPI_Comm, std::string);
-   Streamer(std::string);
+   StreamActuator(int, MPI_Comm, std::string);
+   StreamActuator(std::string);
 
    private:
-   Messenger *msngr_intr;
+   bool _open();
+   StreamMessenger *msngr_intr;
    std::string stream;
  
    std::string program_name; //program_invocation_short_name 

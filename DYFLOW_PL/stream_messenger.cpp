@@ -1,14 +1,14 @@
-#include "messenger.hpp"
+#include "stream_messenger.hpp"
 #include <sstream>
 #include <bits/stdc++.h>
 #include <iostream>
 
-void Messenger::set_stream(std::string str) {
+void StreamMessenger::set_stream(std::string str) {
     stream = str;
 }
 
 
-void Messenger::decode_tag(SENDER_TYPE &st, int &seq, std::string &in_stream) {
+void StreamMessenger::decode_tag(SENDER_TYPE &st, int &seq, std::string &in_stream) {
     std::size_t found = tag.find(":");
     std::string tagx = tag.substr(0, found);
     
@@ -27,7 +27,7 @@ void Messenger::decode_tag(SENDER_TYPE &st, int &seq, std::string &in_stream) {
     DEBUG("After decoding tag :" +  std::to_string(st) + "," + std::to_string(seq) + "," + in_stream) 
 }
 
-void Messenger::create_socket ( ) {
+void StreamMessenger::create_socket ( ) {
 
     switch(socket_t) {
         case SOCKET_TYPE::SUB: 
@@ -53,11 +53,11 @@ void Messenger::create_socket ( ) {
 }
 
 
-Messenger::Messenger(SOCKET_TYPE st, SENDER_TYPE mt, const std::string ip_addr): sender_t(mt), socket_t(st), ip_address(ip_addr), seq(0) {
+StreamMessenger::StreamMessenger(SOCKET_TYPE st, SENDER_TYPE mt, const std::string ip_addr): sender_t(mt), socket_t(st), ip_address(ip_addr), seq(0) {
     create_socket();
 }
 
-std::string Messenger::set_msg (std::string request) {
+std::string StreamMessenger::set_msg (std::string request) {
     if ( sender_t != SENDER_TYPE::INTERM ) { 
         seq = (seq + 1) % INT_MAX;
         std::stringstream ss;
@@ -68,7 +68,7 @@ std::string Messenger::set_msg (std::string request) {
 }
 
 
-std::string Messenger::decode_msg (std::string msg) {
+std::string StreamMessenger::decode_msg (std::string msg) {
     std::size_t found = msg.find (":");
     if (found != std::string::npos) {
           std::string msgtag =  msg.substr(0, found + 1);
@@ -84,21 +84,21 @@ std::string Messenger::decode_msg (std::string msg) {
     return nullptr; 
 }
 
-bool Messenger::send_msg(std::string request) {
+bool StreamMessenger::send_msg(std::string request) {
     std::string message = set_msg(request); 
     DEBUG("Sending : " +  message)
     socket->send (zmq::buffer(message), zmq::send_flags::dontwait);
     return true;
 }
 
-std::string Messenger::receive_msg() {
+std::string StreamMessenger::receive_msg() {
    zmq::message_t msg;
    socket->recv(msg);
    DEBUG("Received : " + msg.to_string() )
    return decode_msg (msg.to_string());
 }
 
-void Messenger::close() {
+void StreamMessenger::close() {
   socket->close();
   context.close(); 
 }
