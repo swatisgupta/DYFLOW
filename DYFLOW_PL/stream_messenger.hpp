@@ -4,8 +4,11 @@
 #include <zmq.hpp>
 #include <iostream>
 
-#ifndef NODEBUG
+
+#ifdef DEBUG_CODE
 #define DEBUG(msg) { std::cout<< msg << std::endl << std::flush; }
+#else
+#define DEBUG(msg) 
 #endif
 
 enum SOCKET_TYPE {
@@ -34,13 +37,16 @@ enum SENDER_TYPE {
 class StreamMessenger {
 
     public:
-    StreamMessenger(SOCKET_TYPE, SENDER_TYPE, const std::string);
-    bool send_msg(std::string);
+    StreamMessenger(SOCKET_TYPE, SENDER_TYPE, std::string);
+    StreamMessenger(); // SOCKET_TYPE, SENDER_TYPE, const std::string&);
+    ~StreamMessenger();
+
+    bool send_msg(std::string &);
     std::string receive_msg();
-    void set_stream(std::string);
+    void set_stream(std::string &);
     void decode_tag(SENDER_TYPE &, int &, std::string &);
-    std::string set_msg(std::string);
-    std::string decode_msg (std::string); 
+    std::string set_msg(std::string &);
+    std::string decode_msg (std::string &); 
     void close();
 
     private:

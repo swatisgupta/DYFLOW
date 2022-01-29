@@ -9,8 +9,9 @@ struct global_properties_t {
    std::unordered_map<std::string, std::vector<std::string>>compress_var;
 
    bool disk_write;
+
    int checkpoint_cntr;
-   int if_checkpoint;
+   bool if_checkpoint;
    int max_checkpoint;
    
    bool if_close;
@@ -40,10 +41,11 @@ class StreamProperties {
    int close();
    void open();
 
-   bool begin_step();
-   bool end_step();
+   int begin_step(int);
+   bool end_step(int);
 
-   int read_var(std::string, int);
+   int read_var(int, std::string);
+   int write_var(int, std::string, std::string&);
    bool compress_var(std::string, std::vector<std::string> params);
    bool if_checkpoint();
    void register_connection(int pid);

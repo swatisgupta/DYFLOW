@@ -22,21 +22,28 @@ bool StreamActuator::setup_conn() {
     return false;
 }
 
-StreamActuator::StreamActuator(int mrank, MPI_Comm mcomm, std::string str) : StreamActuator(str) {
-    rank = mrank;
-    comm = mcomm; 
+StreamActuator::StreamActuator(int mrank, MPI_Comm mcomm, std::string str) {
+     sender = RDWR;
+     pid = getppid();
+     program_name = program_invocation_short_name;  
+     stream = str;
+     msngr_intr = nullptr;  
+     rank = mrank;
+     comm = mcomm; 
 }
 
 StreamActuator::StreamActuator(std::string str): stream(str), msngr_intr(nullptr) {
      sender = RDWR;
-     pid = getpid();
+     pid = getppid();
+     rank = 0;
+     comm = MPI_COMM_NULL;
      program_name = program_invocation_short_name; 
 }
 
 bool StreamActuator::_open() {
     bool ret = true;
     if ( setup_conn() ) {
-         std::string msg = "{ \"reg_conn\" : { \"pname\" : \"" + program_name + "\", \"pid\": \"" +  std::to_string(pid) + "\"}}";
+         std::string msg = "{\"cmd\" : \"reg_conn\",\"pname\" : \"" + program_name + "\", \"pid\": \"" +  std::to_string(pid) + "\"}";
          msngr_intr->send_msg(msg);
          msg = msngr_intr->receive_msg();
 
@@ -54,7 +61,7 @@ bool StreamActuator::begin() {
     if ( rank == 0 ) {
         if ( _open() ) {
              while( !ret_stat ) {
-                std::string msg = "{\"begin_next\": { \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}}";
+                std::string msg = "{\"cmd\" : \"begin_next\", \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}";
                 msngr_intr->send_msg(msg);
                 msg = msngr_intr->receive_msg();
                 if ( msg.compare(RES_OK) == 0) {
@@ -66,9 +73,13 @@ bool StreamActuator::begin() {
              }
         }
     } 
+    
 #ifdef ADIOS2_USE_MPI   
-    MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
-#endif
+    if ( comm != MPI_COMM_NULL) { 
+        MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+        MPI_Barrier(comm);
+    }
+#endif 
     return ret;
 
 }
@@ -81,7 +92,7 @@ bool StreamActuator::end() {
     if ( rank == 0 ) { 
         if ( _open() ) { 
              while( !ret_stat ) {
-                std::string msg = "{\"end_step\": { \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}}";
+                std::string msg = "{\"cmd\" : \"end_next\", \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}";
                 msngr_intr->send_msg(msg);
                 msg = msngr_intr->receive_msg();
                 if ( msg.compare(RES_OK) == 0 ) {
@@ -91,7 +102,10 @@ bool StreamActuator::end() {
         }   
     }   
 #ifdef ADIOS2_USE_MPI   
-    MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+    if ( comm != MPI_COMM_NULL) { 
+       MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+       MPI_Barrier(comm);
+    }
 #endif
     return ret;
 
@@ -109,26 +123,24 @@ int StreamActuator::put(std::string var, std::string & params){
     if ( rank == 0 ) {
         if ( setup_conn() && _open() ) {
              while( !ret_status ) {
-               std::string msg = "{\"end_step\": { \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}}";
-               msngr_intr->send_msg(msg);
-               msg = msngr_intr->receive_msg();
+               std::string out_msg = "{\"cmd\" : \"put_var\", \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\", \"var\" : \"" + var + "\"}";
+               msngr_intr->send_msg(out_msg);
+               std::string msg = msngr_intr->receive_msg();
                std::size_t found = msg.find(":");
                std::string tag = msg;
-
                if ( found != std::string::npos ) {
                     tag = msg.substr(0, found);
                }
+               std::cout << " Returned msg " << msg << " tag $" << tag <<"$" << std::endl;
 
-               if ( tag.compare(RES_OK) == 0 ) {
+               if ( tag == std::string(RES_UNCOMP) ) {
                   ret_status = true;
-               } else if ( tag.compare(RES_COMP) == 0 ) {
+               } else if ( tag == std::string(RES_COMP) ) {
                   params = msg.substr(found + 1).c_str();
                   size = params.size();
                   ret_status = true;
                   compress = true;              
-               } else if ( msg.compare(RES_UNCOMP) == 0 ) {
-                  ret_status = true;
-               } else if (msg.compare(RES_DUMP) == 0 ) {
+               } else if (tag == std::string(RES_DUMP) ) {
                   ret_status = true;
                   dump = true; 
                }
@@ -137,24 +149,36 @@ int StreamActuator::put(std::string var, std::string & params){
         }   
     } 
 #ifdef ADIOS2_USE_MPI   
-    MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);                                                                                
+    if ( comm != MPI_COMM_NULL) { 
+       MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);                                                                                
+       MPI_Barrier(comm);
+    }
 #endif
     if ( ret == true ) {
 #ifdef ADIOS2_USE_MPI   
-         MPI_Bcast(&compress, 1, MPI_C_BOOL, 0, comm); 
+         if ( comm != MPI_COMM_NULL) { 
+             MPI_Bcast(&compress, 1, MPI_C_BOOL, 0, comm); 
+         }
          if ( compress == true ) {
-             MPI_Bcast(&size, 1, MPI_INT, 0, comm); 
+             if ( comm != MPI_COMM_NULL) { 
+                  MPI_Bcast(&size, 1, MPI_INT, 0, comm);
+             } 
              char *param_cstr = nullptr; 
              if ( rank == 0 ) {
                  param_cstr = (char*) params.c_str();
              } else {
                  param_cstr = (char*) malloc(size); 
              }
-             MPI_Bcast(param_cstr, size, MPI_CHAR, 0, comm);
+             if ( comm != MPI_COMM_NULL) {
+                 MPI_Bcast(param_cstr, size, MPI_CHAR, 0, comm);
+             }
              //std::string m(params_cstr);
              params = param_cstr;
-         }                                                                                
-         MPI_Bcast(&dump, 1, MPI_C_BOOL, 0, comm);                                                                                
+         }    
+         if ( comm != MPI_COMM_NULL) {                                                                            
+             MPI_Bcast(&dump, 1, MPI_C_BOOL, 0, comm);                                                                                
+             MPI_Barrier(comm);
+         }
 #endif
          ret_val = 0;
          if (  compress == true )  {
@@ -175,7 +199,7 @@ bool StreamActuator::get(std::string var) {
     if ( rank == 0 ) {                                                                                                      
         if ( setup_conn() && _open() ) {
              while( !ret_status ) {
-               std::string msg = "{\"end_step\": { \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}}";
+               std::string msg = "{ \"cmd\" : \"get_var\", \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\", \"var\" : \"" + var + "\"}";
                msngr_intr->send_msg(msg);
                msg = msngr_intr->receive_msg();
                if ( msg.compare(RES_OK) == 0 ) {
@@ -184,8 +208,11 @@ bool StreamActuator::get(std::string var) {
             }  
         }
     }
-#ifdef ADIOS2_USE_MPI   
-    MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+#ifdef ADIOS2_USE_MPI 
+    if ( comm != MPI_COMM_NULL) {  
+        MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+        MPI_Barrier(comm);
+    }
 #endif
     return ret;
 }
@@ -197,7 +224,10 @@ bool StreamActuator::open() {
         _open();
     } 
 #ifdef ADIOS2_USE_MPI   
-    MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+    if ( comm != MPI_COMM_NULL) { 
+       MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+       MPI_Barrier(comm);
+    }
 #endif
     return ret;
 
@@ -210,7 +240,7 @@ bool StreamActuator::close() {
     if ( rank == 0 ) {
            if ( setup_conn() ) {
               while( !ret_stat ) {  
-                  std::string msg = "{\"dereg_conn\": { \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}}";
+                  std::string msg = "{\"cmd\" : \"dereg_conn\", \"pname\": \"" + program_name + "\", \"pid\" : \"" +  std::to_string(pid) + "\"}";
                   msngr_intr->send_msg(msg);
                   msg = msngr_intr->receive_msg();
                   if ( msg.compare(RES_OK) == 0 ) {
@@ -220,7 +250,10 @@ bool StreamActuator::close() {
            } 
     }
 #ifdef ADIOS2_USE_MPI   
-    MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+    if ( comm != MPI_COMM_NULL) { 
+         MPI_Bcast(&ret, 1, MPI_C_BOOL, 0, comm);
+         MPI_Barrier(comm);
+    } 
 #endif
     return ret;
 }
@@ -233,7 +266,14 @@ bool StreamActuator::get_ip() {
        std::getline(myfile, ip_address);
        myfile.close();
        return true;
-    }   
+    } 
+
+    myfile.open("../../"+ stream + ".interm");
+    if ( myfile.is_open() ) {
+       std::getline(myfile, ip_address);
+       myfile.close();
+       return true;
+    } 
     return false;
 }
 

@@ -3,6 +3,7 @@
 
 
 InfoManager::InfoManager(std::string str):stream(str), writerId(-1), writerStr(""), connections() {
+    reset_prop();
 } 
 
 bool InfoManager::register_reader(std::string str) {
@@ -69,15 +70,55 @@ bool InfoManager::deregister_connection(std::string str, int id) {
     return true;
 }
 
+int InfoManager::begin_step(std::string str, int id) {
+    auto ele = connections.find(str);
+    if ( ele != connections.end() ) { 
+        return ele->second->begin_step(id);
+    }
+    return 1;
+}
+
+int InfoManager::end_step(std::string str, int id) {
+    auto ele = connections.find(str);
+    if ( ele != connections.end() ) { 
+        return ele->second->end_step(id);
+    }
+    return 1;
+}
+
+int InfoManager::put_var(std::string str, int id, std::string var, std::string &params) {
+    auto ele = connections.find(str);
+    if ( ele != connections.end() ) { 
+        return ele->second->write_var(id, var, params);
+    }
+    return 1;
+}
+
+int InfoManager::get_var(std::string str, int id, std::string var) {
+    return 1;
+}
+
+
 void InfoManager::reset_prop() {
+
      global_prop.compress_var.clear();
      global_prop.disk_write = false;
      global_prop.if_close = true;
      global_prop.wait = 0;
+     global_prop.steps_comp = 0;
      global_prop.nreaders = 0;
      global_prop.begin_cntr = 0;
      global_prop.end_cntr = 0;
-}
+     global_prop.if_checkpoint = false;
+     global_prop.max_checkpoint = 0;
+     global_prop.checkpoint_cntr = 0;
+     global_prop.begin_step = false;
+     global_prop.end_step = false;
+     global_prop.write_next = true;
+     global_prop.read_next = true;
+     global_prop.round_robin = false;
+     global_prop.turn = -1;
+ }
 
 
 void InfoManager::set_policy(std::string stream_v, int policy, std::vector<std::string>& params ) {

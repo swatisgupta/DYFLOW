@@ -11,6 +11,7 @@ enum policy_types {
    RESTART,
    SKIP_STEPS_N,
    SKIP_STEPS_FREQ,
+   NO_SKIP_STEPS,
    CHECKPOINT_N,
    CHECKPOINT_FREQ,
    NO_CHECKPOINT,
@@ -43,7 +44,6 @@ class InfoManager {
    std::string  writerStr;
 
    void reset_prop();
-   void set_policy(std::string stream_v, int policy, std::vector<std::string> &);
    
    public:
    InfoManager(std::string); 
@@ -53,6 +53,12 @@ class InfoManager {
    bool is_registered(std::string, int); 
    bool register_connection(std::string, int);
    bool deregister_connection(std::string, int);
+   int begin_step(std::string, int);
+   int end_step(std::string, int);
+   int get_var(std::string, int, std::string);
+   int put_var(std::string, int, std::string, std::string&);
+   void set_policy(std::string stream_v, int policy, std::vector<std::string> &);
+
    StreamProperties* get_settings_for(int);
    std::string get_stream();
 }; 

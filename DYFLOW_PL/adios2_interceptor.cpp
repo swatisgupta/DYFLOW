@@ -13,22 +13,34 @@
 #include <string.h>
 #include "stream_actuator.hpp"
 
-
+//#ifndef NODEBUG 
+//   #define DEBUG(msg) { std::cout << msg << std::endl << std::flush; }
+//#endif
 //std::unordered_map <std::string, StreamActuator*> streamer_map;  
-MPI_Comm comm;
+//MPI_Comm comm;
+
+
 
 StreamActuator* conn_streamer (std::string stream) {
   StreamActuator *istream = nullptr;
-  istream = new StreamActuator(stream);      
+  std::string base_filename = stream;
+  if (stream.find_last_of("/") != std::string::npos) {
+      base_filename = stream.substr(stream.find_last_of("/") + 1);
+  }
+  istream = new StreamActuator(base_filename);      
   return istream;  
 }
 
 #ifdef ADIOS2_USE_MPI
 StreamActuator* conn_streamer ( std::string stream, MPI_Comm comm) {
   StreamActuator *istream = nullptr;
+  std::string base_filename = stream;
+  if (stream.find_last_of("/") != std::string::npos) {
+      base_filename = stream.substr(stream.find_last_of("/") + 1);
+  }
   int rank;
   MPI_Comm_rank(comm, &rank);
-  istream = new StreamActuator(rank, comm, stream);      
+  istream = new StreamActuator(rank, comm, base_filename);      
   return istream;  
 }
 #endif 
@@ -37,7 +49,7 @@ template <class T>
 void checkpoint_data(int rank, std::string var, int step, const T* data, adios2::Dims ndims, adios2::Box<adios2::Dims> ldims ) { 
     try 
     {   
-       std::cout << "Before declare " << std::endl << std::flush; 
+       DEBUG("Before declare ") 
    
        #ifdef ADIOS2_USE_MPI 
           adios2::ADIOS adios(MPI_COMM_WORLD, true);
@@ -45,14 +57,14 @@ void checkpoint_data(int rank, std::string var, int step, const T* data, adios2:
           adios2::ADIOS adios(true);
        #endif
        adios2::IO io = adios.DeclareIO("Checkpoint");
-       std::cout << "After declare " << std::endl << std::flush; 
+       DEBUG("After declare ") 
 
        adios2::Variable<T> varArray = io.DefineVariable<T>(var, ndims);
-       std::cout << "After defineVar " << std::endl << std::flush; 
+       DEBUG( "After defineVar ") 
 
        std::string fname = var + std::to_string(step) + ".bp";
        adios2::Engine writer = io.Open(fname, adios2::Mode::Write);
-       std::cout << "After open " << std::endl << std::flush; 
+       DEBUG( "After open ") 
 
        varArray.SetSelection(ldims);
 
@@ -87,7 +99,7 @@ void checkpoint_data(int rank, std::string var, int step, const T* data, adios2:
 }
 
 
-
+/** 
 adios2::core::Engine& adios2::core::IO::Open(const std::string &name, const adios2::Mode mode) {
 
   std::cout<< "Intercepted adios2::IO::Open(const std::string &name, const adios2::Mode mode)" <<std::endl;
@@ -118,11 +130,12 @@ adios2::core::Engine& adios2::core::IO::Open(const std::string &name, const adio
   DEBUG("Registered for " + name);
   return (this->*origMethod)(name, mode);
 } 
+**/
 
-#if ADIOS2_USE_MPI
+//#if ADIOS2_USE_MPI
 adios2::core::Engine& adios2::core::IO::Open(const std::string &name, const adios2::Mode mode, adios2::helper::Comm comm) {
 
-  std::cout<< "Intercepted adios2::IO::Open(const std::string &name, const adios2::Mode mode, MPI_Comm comm)" <<std::endl;
+  DEBUG("Intercepted adios2::IO::Open(const std::string &name, const adios2::Mode mode, MPI_Comm comm)") 
 
   //const char* adios2_dir = std::getenv("ADIOS2_DIR");
   //std::stringstream adios2_lib;
@@ -131,14 +144,21 @@ adios2::core::Engine& adios2::core::IO::Open(const std::string &name, const adio
 
   typedef adios2::core::Engine& (adios2::core::IO::*methodType)(const std::string, const adios2::Mode, adios2::helper::Comm);
 
-  bool reader = false;
-  if ( mode == adios2::Mode::Read) {
-      reader = true;
-  }
+  if ( name.find("tau") == std::string::npos) {   
+    bool reader = false;
+    if ( mode == adios2::Mode::Read) {
+        reader = true;
+    }
 
-  StreamActuator* strm = conn_streamer ( name, MPI_COMM_WORLD );
+#ifdef ADIOS2_USE_MPI
+    StreamActuator* strm = conn_streamer ( this->m_Name, adios2::helper::CommAsMPI(comm));
+#else
+    StreamActuator* strm = conn_streamer (this->m_Name);
+#endif 
 
-  strm->open();
+    strm->open();
+    delete strm;
+  } 
 
   static methodType origMethod = nullptr;
   
@@ -149,22 +169,22 @@ adios2::core::Engine& adios2::core::IO::Open(const std::string &name, const adio
     *reinterpret_cast<void**>(&origMethod) = origMethodPtr;
   }
 
-  delete strm;
   return (this->*origMethod)(name, mode, adios2::helper::CommDupMPI(adios2::helper::CommAsMPI(comm)));
 }
-#endif
+//#endif
 
 
 adios2::StepStatus adios2::core::Engine::BeginStep() {
 
-  std::cout<< "Intercepted adios2::core::Engine::BeginStep()" << std::endl << std::flush;
-
+  DEBUG( "Intercepted adios2::core::Engine::BeginStep()")
+  if (this->m_Name.find("tau") == std::string::npos) {  
 #ifdef ADIOS2_USE_MPI
-  StreamActuator* strm = conn_streamer (this->m_Name, MPI_COMM_WORLD);
+     StreamActuator* strm = conn_streamer (this->m_Name, adios2::helper::CommAsMPI(this->m_Comm)); //m_IO.m_ADIOS.GetComm()));
 #else
-  StreamActuator* strm = conn_streamer (this->m_Name);
+     StreamActuator* strm = conn_streamer (this->m_Name);
 #endif 
-
+     delete strm;
+  }
   typedef adios2::StepStatus (adios2::core::Engine::*methodType)();
 
   static methodType origMethod = nullptr;
@@ -180,11 +200,24 @@ adios2::StepStatus adios2::core::Engine::BeginStep() {
 
 adios2::StepStatus adios2::core::Engine::BeginStep(const adios2::StepMode mode, const float timeoutSeconds)  {
 
-  std::cout<< "Intercepted adios2::core::Engine::BeginStep(const adios2::StepMode mode, const float timeoutSeconds)" <<std::endl << std::flush;
+  DEBUG( "Intercepted adios2::core::Engine::BeginStep(const adios2::StepMode mode, const float timeoutSeconds)")
+  if (this->m_Name.find("tau") != std::string::npos) {
+     typedef adios2::StepStatus (adios2::core::Engine::*methodType)(const adios2::StepMode, const float);
+     typedef void (adios2::core::Engine::*methodType1)();
+     static methodType origMethod = nullptr;
+      if (origMethod == nullptr)
+      { 
+         auto origMethodPtr = dlsym(RTLD_NEXT, "_ZN6adios24core6Engine9BeginStepENS_8StepModeEf");
+         *reinterpret_cast<void**>(&origMethod) = origMethodPtr;
+      }
+
+      return (this->*origMethod)(mode, timeoutSeconds);
+  }
+  
 #ifdef ADIOS2_USE_MPI
-  StreamActuator* strm = conn_streamer (this->m_Name, MPI_COMM_WORLD);
+    StreamActuator* strm = conn_streamer (this->m_Name, adios2::helper::CommAsMPI(this->m_Comm)); // m_IO.m_ADIOS.GetComm()) );
 #else
-  StreamActuator* strm = conn_streamer (this->m_Name);
+    StreamActuator* strm = conn_streamer (this->m_Name);
 #endif 
 
   typedef adios2::StepStatus (adios2::core::Engine::*methodType)(const adios2::StepMode, const float);
@@ -212,18 +245,22 @@ adios2::StepStatus adios2::core::Engine::BeginStep(const adios2::StepMode mode, 
          (this->*origMethodE)(); */
      }
   }
+  delete strm;
   return status; //(this->*origMethod)(mode, timeoutSeconds);
 }
 
 
 void adios2::core::Engine::EndStep() {
 
-  std::cout<< "Intercepted adios2::core::Engine::EndStep()" << std::endl << std::flush;
+  DEBUG( "Intercepted adios2::core::Engine::EndStep()")
+  if (this->m_Name.find("tau") == std::string::npos) {
 #ifdef ADIOS2_USE_MPI
-  StreamActuator* strm = conn_streamer (this->m_Name, MPI_COMM_WORLD);
+     StreamActuator* strm = conn_streamer (this->m_Name, adios2::helper::CommAsMPI(this->m_Comm)); // m_IO.m_ADIOS.GetComm()) );
 #else
-  StreamActuator* strm = conn_streamer (this->m_Name);
+     StreamActuator* strm = conn_streamer (this->m_Name);
 #endif 
+     delete strm;  
+  }
 
   typedef void (adios2::core::Engine::*methodType)();
 
@@ -235,22 +272,23 @@ void adios2::core::Engine::EndStep() {
     *reinterpret_cast<void**>(&origMethod) = origMethodPtr;
   
   }
-  delete strm;  
   return (this->*origMethod)();
 }
 
 
 void adios2::core::Engine::Close(const int transportIndex) {
 
-  std::cout<< "Intercepted adios2::core::Engine::Close(int)" << std::endl << std::flush;
+  DEBUG( "Intercepted adios2::core::Engine::Close(int)")
+  if (this->m_Name.find("tau") == std::string::npos) {
 #ifdef ADIOS2_USE_MPI
-  StreamActuator* strm = conn_streamer (this->m_Name, MPI_COMM_WORLD);
+  StreamActuator* strm = conn_streamer (this->m_Name, adios2::helper::CommAsMPI(this->m_Comm)); // m_IO.m_ADIOS.GetComm()) );
 #else
   StreamActuator* strm = conn_streamer (this->m_Name);
 #endif 
 
   while (!strm->close());
-
+  delete strm;  
+  }
   typedef void (adios2::core::Engine::*methodType)(const int);
 
   static methodType origMethod = nullptr;
@@ -261,7 +299,6 @@ void adios2::core::Engine::Close(const int transportIndex) {
     *reinterpret_cast<void**>(&origMethod) = origMethodPtr;
   
   }
-  delete strm;  
 
   return (this->*origMethod)(transportIndex);
 }
@@ -269,15 +306,32 @@ void adios2::core::Engine::Close(const int transportIndex) {
 
 template <class T>
   void adios2::core::Engine::Put(adios2::core::Variable<T> &variable, const T *data, const adios2::Mode launch) { 
-  std::cout<< "Intercepted adios2::core::Engine::Put(const std::string &variableName, const T &datum, const adios2::Mode launch)" << std::endl << std::flush;
+  DEBUG( "Intercepted adios2::core::Engine::Put(const std::string &variableName, const T &datum, const adios2::Mode launch)")
   typedef void (adios2::core::Engine::*methodType)(adios2::core::Variable<T> &, const T *, const adios2::Mode);
 
   static methodType origMethod = nullptr;
   int rank = 0;
   int step; 
+  if (this->m_Name.find("tau") != std::string::npos) {
+  if (origMethod == nullptr)
+  { 
+    std::string tname = typeid(T).name();
+    std::string symbol_nm = "_ZN6adios24core6Engine3PutI"+ tname  +"EEvRNS0_8VariableIT_EEPKS4_NS_4ModeE"; 
+    auto origMethodPtr = dlsym(RTLD_NEXT, symbol_nm.c_str());
+    *reinterpret_cast<void**>(&origMethod) = origMethodPtr;
+  }
+  return (this->*origMethod)(variable, data, launch);
+  }
 #ifdef ADIOS2_USE_MPI
-  StreamActuator* strm = conn_streamer (this->m_Name, MPI_COMM_WORLD);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank); 
+  StreamActuator* strm = nullptr;
+  MPI_Comm comm = adios2::helper::CommAsMPI(this->m_Comm); //m_IO.m_ADIOS.GetComm());
+  if (variable.m_ShapeID == ShapeID::GlobalArray || this->m_Name == "xgc.particle.bp"  || this->m_Name == "xgc.restart.bp") { 
+      strm = conn_streamer (this->m_Name, comm) ;
+  } else {
+      strm = conn_streamer (this->m_Name);
+  }
+
+  MPI_Comm_rank(comm, &rank);
 #else
   StreamActuator* strm = conn_streamer (this->m_Name);
 #endif 
@@ -287,28 +341,41 @@ template <class T>
   std::string key;
   std::string value; 
  
+   DEBUG( " Return for " + variable.m_Name)
   int ret = strm->put(variable.m_Name, params);
+
+  DEBUG( " Return for " + variable.m_Name + " value " + std::to_string(ret) )
+
   if ( ret == 1 ) {
     variable.RemoveOperations();
 
-    char *token = strtok((char*)params.c_str(), ":");
+    char *token = strtok((char*)params.c_str(), ",");
     if ( token != NULL ) {
         op = token; // new adios2::core::Operation();
     } 
     int i = 1;
-    token = strtok(NULL, "-");
+    token = strtok(NULL, ",");
     while (token != NULL)
     {
         if ( i % 2 == 0 ) {
             value = token;
+            break;
         } else {
             key = token;
         }
-        token = strtok(NULL, "-");
+        token = strtok(NULL, ",");
         i++;
     }
-    adios2::core::Operator &opern = m_IO.m_ADIOS.DefineOperator("compress", op);
-    variable.AddOperation(opern, {{key, value}});
+    
+    adios2::core::Operator* oprator =  m_IO.m_ADIOS.InquireOperator(op + "_" + variable.m_Name);
+    if ( oprator == nullptr ) {
+         adios2::core::Operator &opern = m_IO.m_ADIOS.DefineOperator(op + "_" + variable.m_Name, op);
+         variable.AddOperation(opern, {{key, value}});
+    } else {
+         variable.AddOperation(*oprator, {{key, value}});
+    }
+
+    DEBUG( " Compressing var " + variable.m_Name + " with " + op + " " + key + " " +  value)
   } else if ( ret == 0 ) {
     variable.RemoveOperations();
   } else if (ret == 2 ) {
@@ -322,7 +389,9 @@ template <class T>
     auto origMethodPtr = dlsym(RTLD_NEXT, symbol_nm.c_str());
     *reinterpret_cast<void**>(&origMethod) = origMethodPtr;
   }
-
+  //sleep(5); 
+  strm->close();
+  delete strm;
   return (this->*origMethod)(variable, data, launch);
 }
 
@@ -335,15 +404,17 @@ void adios2::core::Engine::Get(adios2::core::Variable<T> & variable,  T *data, c
   typedef void (adios2::core::Engine::*methodType)(adios2::core::Variable<T> &, T *, const adios2::Mode);
 
   static methodType origMethod = nullptr;
+  if (this->m_Name.find("tau") == std::string::npos) {
 
 #ifdef ADIOS2_USE_MPI
-  StreamActuator* strm = conn_streamer (this->m_Name, MPI_COMM_WORLD);
+  StreamActuator* strm = conn_streamer (this->m_Name, adios2::helper::CommAsMPI(this->m_Comm)); //m_IO.m_ADIOS.GetComm()) );
 #else
   StreamActuator* strm = conn_streamer (this->m_Name);
 #endif 
 
   strm->get(variable.m_Name);
-
+  delete strm;
+  }
   if (origMethod == nullptr)
   { 
     std::string tname = typeid(T).name();

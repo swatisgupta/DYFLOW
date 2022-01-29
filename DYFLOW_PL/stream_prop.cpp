@@ -23,11 +23,14 @@ bool StreamProperties::is_registered(int pid) {
 }
 
 void StreamProperties::deregister_connection(int pid) {
-  for (std::vector<int>::iterator it = conn_ids.begin() ; it != conn_ids.end(); ++it) {
+  std::vector<int>::iterator it;
+  for (it = conn_ids.begin() ; it != conn_ids.end(); ++it) {
     if ( *it == pid ) {
           conn_ids.erase(it);
+          return;
     } 
   }
+  
 }
 
 void StreamProperties::open() {
@@ -61,7 +64,7 @@ int StreamProperties::close() {
 }
 
 
-bool StreamProperties::begin_step() {
+int StreamProperties::begin_step(int id) {
     /* if( writer || noskip_step ) {
         return global_props->begin_step;
     }
@@ -71,10 +74,11 @@ bool StreamProperties::begin_step() {
 
     global_props->begin_cntr++;
     begin_cntr++;
-    return true;
+     
+    return read_var(id, "");
 }
 
-bool StreamProperties::end_step() {
+bool StreamProperties::end_step(int id) {
     if (writer) {
        if ( global_props->disk_write && global_props->checkpoint_cntr ) {
            global_props->checkpoint_cntr = global_props->max_checkpoint;
@@ -106,7 +110,10 @@ bool StreamProperties::end_step() {
     return true; 
 }
 
-int StreamProperties::read_var(std::string var, int id) {
+
+
+
+int StreamProperties::read_var(int id, std::string var) {
     if( !noskip_step && nskip_cntr != 0) {
        return 0; //skip
     }
@@ -125,6 +132,21 @@ int StreamProperties::read_var(std::string var, int id) {
     return 1; //good to go
 }
 
+int StreamProperties::write_var(int id, std::string var, std::string &comp_params) {
+   if (if_checkpoint()) {
+        return 2;
+   } else if ( global_props->compress_var.find(var) != global_props->compress_var.end()) {
+       std::vector<std::string> params = global_props->compress_var[var];
+       std::string cpms;
+       for ( auto cntr = params.begin(); cntr != params.end(); cntr ++) {
+           cpms += *cntr + ",";
+       }
+       comp_params = cpms; //.substr(0, cpms.length() - 1);
+       return 1;
+   } else {
+        return 0;
+   }
+}
 
 bool StreamProperties::compress_var(std::string var, std::vector<std::string> params) {
      global_props->compress_var[var] = params;
@@ -133,7 +155,7 @@ bool StreamProperties::compress_var(std::string var, std::vector<std::string> pa
 
 
 bool StreamProperties::if_checkpoint() {
-    if (global_props->checkpoint_cntr != 0) {
+    if ( global_props->if_checkpoint && global_props->checkpoint_cntr != 0) {
         return true;
     }
     return false;
@@ -153,7 +175,7 @@ void  StreamProperties::set_skip(int nskip, int m_skip) {
 }
 
 void  StreamProperties::set_RR(bool rr) {
-   round_robin = rr; 
+    round_robin = rr; 
 } 
 
 
